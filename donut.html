@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>canvas donut</title>
+  <style>
+    #donut {
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="donut" width="490" height="490"></canvas>
+  <div id="controls">
+    <div>
+      <h5>电量</h5>
+      <div>
+        <input id="lowOrEqual20" type="button" value="<= 20%">
+        <input id="lowOrEqual70" type="button" value="<= 70%">
+        <input id="lowOrEqual100" type="button" value="<= 100%">
+      </div>
+    </div>
+    <div>
+      <h5>充电状态</h5>
+      <div>
+        <input id="chargePedding" type="button" value="未充电">
+        <input id="chargeDoing" type="button" value="充电中">
+        <input id="chargeError" type="button" value="充电故障">
+        <input id="chargeCompleted" type="button" value="充电完成">
+      </div>
+    </div>
+  </div>
+</body>
+<script>
+  function initChargeIcon() {
+    var chargePedding = new Image();
+    chargePedding.src = './chargePedding.png';
+    var chargeDoing = new Image();
+    chargeDoing.src = './chargeDoing.png';
+    var chargeError = new Image();
+    chargeError.src = './chargeError.png';
+    var chargeCompleted = new Image();
+    chargeCompleted.src = './chargeCompleted.png';
+    var iconPath = {
+      '未充电': chargePedding,
+      '充电中': chargeDoing,
+      '充电故障': chargeError,
+      '充电完成': chargeCompleted,
+    };
+    return iconPath;
+  }
+  var iconPath = initChargeIcon();
+  
+  var canvas = document.getElementById('donut');
+  var context = canvas.getContext('2d');
+  
+  var carEnergyDial = {
+    centerX: 245, // 画布中心x坐标
+    centerY: 245, // 画布中心y坐标
+    reserveAngle: 120, // 预留角度值
+    annulusGroupCount: 10, // 圆环组数
+    lineCountPerGroup: 10, // 每组圆环包含多少线条
+    marginRatio: 2, // 间隔与线条的宽度占比
+    lineGapOuter: 245,
+    lineOuter: 228,
+    lineInner: 187,
+    lineGapColor: '#dfdfdf',
+    energy: 0,
+    energyUnit: '%',
+    chargeStatus: '未充电',
+    centerCircleRadius: 160,
+    iconWidth: 38,
+    iconMargin: 12,
+
+    fromValue: 0,
+    targetValue: 0,
+    animationFrame: '',
+    timeStamp: '',
+    animateTime: 1000,
+
+    _drawAnnulus: function (outerRadius, innerRadius, startAngle, endAngle) {
+      context.beginPath();
+      context.arc(this.centerX, this.centerY, outerRadius, startAngle, endAngle, false);
+      context.arc(this.centerX, this.centerY, innerRadius, endAngle, startAngle, true);
+      context.fill();
+    },
+    _drawDonut: function (fillColor) {
+      var annulusGroupAngle = (360 - this.reserveAngle) / this.annulusGroupCount;
+      var lineRadians = annulusGroupAngle / ((this.marginRatio + 1) * (this.lineCountPerGroup - 1) + 1) / 180 * Math.PI;
+      
+      for(var i = 0; i < this.annulusGroupCount; i++) {
+        for(var j = 0; j < this.lineCountPerGroup; j++) {
+
+          var startAngle = (this.marginRatio + 1) * lineRadians * (j + i * 10);
+          var color = (i * 10 + j + 1) > this.energy ? this.lineGapColor : fillColor;
+          context.fillStyle = color;
+          if(j === 9 && i !== (this.annulusGroupCount - 1)) {
+            this._drawAnnulus(this.lineGapOuter, this.lineInner, startAngle, startAngle + lineRadians)
+          } else {
+            this._drawAnnulus(this.lineOuter, this.lineInner, startAngle, startAngle + lineRadians)
+          }
+        }
+      } 
+    },
+    redrawDonut: function() {
+      context.save();
+      context.translate(this.centerX, this.centerY);
+      context.rotate( 142 * Math.PI/ 180);
+      context.translate(-this.centerX, -this.centerY);
+      var fillColor = '';
+      if(this.energy <= 20) {
+        fillColor = '#F8261B';
+      } else if (this.energy <= 70) {
+        fillColor = '#F9BF24';
+      } else if (this.energy <= 100) {
+        fillColor = '#1274E3';
+      }
+      this._drawDonut(fillColor);
+      context.restore();
+    },
+    redrawCenterCircle: function() {
+      context.save();
+      context.fillStyle = 'white';
+      context.shadowBlur = 35;
+      context.shadowColor = 'rgba(131, 169, 212, 0.15)';
+      context.beginPath();
+      context.arc(this.centerX, this.centerY, this.centerCircleRadius, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    },
+    redrawEnegyNumText: function() {
+      context.save();
+
+      context.font = '138px sans-serif';
+      var energyTextWidth = context.measureText(this.energy).width;
+      context.font = '38px sans-serif';
+      var unitTextWidth = context.measureText(this.energyUnit).width;
+      
+      var translateX = this.centerX - this.centerCircleRadius;
+      var translateY = this.centerY - this.centerCircleRadius;
+      context.translate(translateX, translateY);
+     
+      
+      context.fillStyle = '#353535';
+      context.textBaseline = 'hanging';
+      context.font = '138px sans-serif';
+      var energyTextX = (this.centerCircleRadius * 2 -  energyTextWidth - unitTextWidth) / 2;
+      var energyTextY = 92; 
+      context.fillText(this.energy, energyTextX, energyTextY);
+      
+      context.font = '38px sans-serif';
+      var unitTextX = energyTextX + energyTextWidth;
+      var unitTextY = 175;
+      context.fillText(this.energyUnit, unitTextX, unitTextY);
+
+      context.restore();
+    },
+    redrawChargeStatus: function() {
+      context.save();
+
+      context.font = '20px sans-serif';
+      var statusTextWidth = context.measureText(this.chargeStatus).width;
+
+      var translateX = this.centerX - this.centerCircleRadius;
+      var translateY = this.centerY - this.centerCircleRadius;
+      context.translate(translateX, translateY);
+      
+      var iconX = (this.centerCircleRadius * 2 -  this.iconWidth - this.iconMargin - statusTextWidth) / 2;
+      var iconY =  251;
+      context.drawImage(iconPath[this.chargeStatus], iconX, iconY);
+      var statusX = iconX + this.iconWidth + this.iconMargin;
+      context.textBaseline = 'hanging';
+      context.fillText(this.chargeStatus, statusX, iconY);
+
+      context.restore();
+    },
+    changeEnergyWithAnimation: function() {
+      if (Date.now() - carEnergyDial.timeStamp > carEnergyDial.animateTime) {
+        window.cancelAnimationFrame(carEnergyDial.animationFrame);
+        return;
+      }
+      context.clearRect(0, 0, canvas.width, canvas.height);
+
+      var diff = carEnergyDial.targetValue - carEnergyDial.fromValue;
+      var step = diff * (Date.now() - carEnergyDial.timeStamp) / carEnergyDial.animateTime;
+      var value = Math.ceil(carEnergyDial.fromValue + step);
+      carEnergyDial.energy = diff < 0 ? Math.max(value, carEnergyDial.targetValue) : Math.min(value, carEnergyDial.targetValue);
+      carEnergyDial.redrawDonut();
+      carEnergyDial.redrawCenterCircle();
+      carEnergyDial.redrawEnegyNumText();
+      carEnergyDial.redrawChargeStatus();
+      carEnergyDial.animationFrame = window.requestAnimationFrame(carEnergyDial.changeEnergyWithAnimation);
+    },
+    changeChargeStatus: function () {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      carEnergyDial.redrawDonut();
+      carEnergyDial.redrawCenterCircle();
+      carEnergyDial.redrawEnegyNumText();
+      carEnergyDial.redrawChargeStatus();
+    }
+  }
+
+  document.getElementById('controls').addEventListener('click', function(e) {
+    switch(e.target.id) {
+      case 'lowOrEqual20':
+        carEnergyDial.fromValue = carEnergyDial.targetValue;
+        carEnergyDial.targetValue = 18;
+        carEnergyDial.timeStamp = Date.now();
+        carEnergyDial.changeEnergyWithAnimation();
+        break;
+      case 'lowOrEqual70':
+        carEnergyDial.fromValue = carEnergyDial.targetValue;
+        carEnergyDial.targetValue = 50;
+        carEnergyDial.timeStamp = Date.now();
+        carEnergyDial.changeEnergyWithAnimation();
+        break;
+      case 'lowOrEqual100':
+        carEnergyDial.fromValue = carEnergyDial.targetValue;
+        carEnergyDial.targetValue = 100;
+        carEnergyDial.timeStamp = Date.now();
+        carEnergyDial.changeEnergyWithAnimation();
+        break;
+      case 'chargePedding':
+        carEnergyDial.chargeStatus = '未充电';
+        carEnergyDial.changeChargeStatus();
+        break;
+      case 'chargeDoing':
+        carEnergyDial.chargeStatus = '充电中';
+        carEnergyDial.changeChargeStatus();
+        break;
+      case 'chargeError':
+        carEnergyDial.chargeStatus = '充电故障';
+        carEnergyDial.changeChargeStatus();
+        break;
+      case 'chargeCompleted':
+        carEnergyDial.chargeStatus = '充电完成';
+        carEnergyDial.changeChargeStatus();
+        break;
+    }
+  });
+</script>
+</html>
